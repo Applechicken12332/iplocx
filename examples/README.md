@@ -14,7 +14,7 @@
 ### 前提条件
 
 1. 下载数据库文件：
-   - QQwry: http://update.cz88.net/soft/qqwry.rar
+   - QQwry: https://raw.githubusercontent.com/FW27623/qqwry/refs/heads/main/qqwry.dat
    - GeoLite2: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
 
 2. 将数据库文件放置在正确位置：

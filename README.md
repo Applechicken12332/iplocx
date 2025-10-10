@@ -302,7 +302,7 @@ var (
 
 ### QQwry（纯真IP库）
 
-- **下载地址**: http://update.cz88.net/soft/qqwry.rar
+- **下载地址**: https://raw.githubusercontent.com/FW27623/qqwry/refs/heads/main/qqwry.dat
 - **文件名**: `qqwry.dat`
 - **特点**: 
   - 国内IP信息准确

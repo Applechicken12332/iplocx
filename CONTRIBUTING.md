@@ -122,7 +122,7 @@ go mod download
 
 ### 下载测试数据
 
-1. QQwry 数据库: http://update.cz88.net/soft/qqwry.rar
+1. QQwry 数据库: https://raw.githubusercontent.com/FW27623/qqwry/refs/heads/main/qqwry.dat
 2. GeoLite2 数据库: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
 
 ### 运行测试
