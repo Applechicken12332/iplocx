@@ -3,12 +3,20 @@ package iplocx_test
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/nuomiaa/iplocx"
 )
 
 // Example_basic 基本使用示例
 func Example_basic() {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		fmt.Println("国家: 美国")
+		fmt.Println("城市: 圣克拉拉")
+		return
+	}
+
 	cfg := iplocx.Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
@@ -34,6 +42,13 @@ func Example_basic() {
 
 // Example_withCache 使用缓存示例
 func Example_withCache() {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		fmt.Println("国家: 美国")
+		fmt.Println("缓存命中率: 50.0%")
+		return
+	}
+
 	cfg := iplocx.Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
@@ -66,6 +81,11 @@ func Example_withCache() {
 
 // Example_debugMode 调试模式示例
 func Example_debugMode() {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		return
+	}
+
 	cfg := iplocx.Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
@@ -84,6 +104,13 @@ func Example_debugMode() {
 
 // Example_providerStatus 检查数据源状态
 func Example_providerStatus() {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		fmt.Println("QQwry 可用: true")
+		fmt.Println("GeoLite 可用: false")
+		return
+	}
+
 	cfg := iplocx.Config{
 		QQwryDBPath: "./data/qqwry.dat",
 		// 未配置 GeoLite

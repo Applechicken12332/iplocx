@@ -1,15 +1,22 @@
 package iplocx
 
 import (
+	"os"
 	"testing"
 )
 
 // TestNewLocator 测试创建查询器
 func TestNewLocator(t *testing.T) {
+	// 检查数据文件是否存在
+	_, hasQQwry := os.Stat("./data/qqwry.dat")
+	_, hasGeoLite := os.Stat("./data/GeoLite2-City.mmdb")
+	hasDataFiles := hasQQwry == nil || hasGeoLite == nil
+
 	tests := []struct {
-		name    string
-		config  Config
-		wantErr bool
+		name       string
+		config     Config
+		wantErr    bool
+		skipNoData bool
 	}{
 		{
 			name: "双数据源",
@@ -17,26 +24,30 @@ func TestNewLocator(t *testing.T) {
 				QQwryDBPath:   "./data/qqwry.dat",
 				GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
 			},
-			wantErr: false,
+			wantErr:    false,
+			skipNoData: true,
 		},
 		{
 			name: "只有QQwry",
 			config: Config{
 				QQwryDBPath: "./data/qqwry.dat",
 			},
-			wantErr: false,
+			wantErr:    false,
+			skipNoData: true,
 		},
 		{
 			name: "只有GeoLite",
 			config: Config{
 				GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
 			},
-			wantErr: false,
+			wantErr:    false,
+			skipNoData: true,
 		},
 		{
-			name:    "无数据源",
-			config:  Config{},
-			wantErr: true,
+			name:       "无数据源",
+			config:     Config{},
+			wantErr:    true,
+			skipNoData: false,
 		},
 		{
 			name: "启用缓存",
@@ -45,12 +56,18 @@ func TestNewLocator(t *testing.T) {
 				EnableCache: true,
 				CacheSize:   100,
 			},
-			wantErr: false,
+			wantErr:    false,
+			skipNoData: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 如果测试需要数据文件但文件不存在，则跳过
+			if tt.skipNoData && !hasDataFiles {
+				t.Skip("跳过：数据文件不存在")
+			}
+
 			locator, err := NewLocator(tt.config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewLocator() error = %v, wantErr %v", err, tt.wantErr)
@@ -70,6 +87,11 @@ func TestNewLocator(t *testing.T) {
 
 // TestQuery 测试查询功能
 func TestQuery(t *testing.T) {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		t.Skip("跳过：数据文件不存在")
+	}
+
 	cfg := Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
@@ -137,6 +159,11 @@ func TestQuery(t *testing.T) {
 
 // TestCache 测试缓存功能
 func TestCache(t *testing.T) {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		t.Skip("跳过：数据文件不存在")
+	}
+
 	cfg := Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
@@ -193,6 +220,11 @@ func TestCache(t *testing.T) {
 
 // TestProviderStatus 测试数据源状态
 func TestProviderStatus(t *testing.T) {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		t.Skip("跳过：数据文件不存在")
+	}
+
 	cfg := Config{
 		QQwryDBPath: "./data/qqwry.dat",
 		// 不配置 GeoLite
@@ -215,6 +247,11 @@ func TestProviderStatus(t *testing.T) {
 
 // TestProviderInfo 测试详细数据源信息
 func TestProviderInfo(t *testing.T) {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		t.Skip("跳过：数据文件不存在")
+	}
+
 	cfg := Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "invalid-path.mmdb", // 故意使用无效路径
@@ -297,6 +334,11 @@ func TestLocationMethods(t *testing.T) {
 
 // TestConcurrency 测试并发安全性
 func TestConcurrency(t *testing.T) {
+	// 检查数据文件是否存在
+	if _, err := os.Stat("./data/qqwry.dat"); os.IsNotExist(err) {
+		t.Skip("跳过：数据文件不存在")
+	}
+
 	cfg := Config{
 		QQwryDBPath:   "./data/qqwry.dat",
 		GeoLiteDBPath: "./data/GeoLite2-City.mmdb",
