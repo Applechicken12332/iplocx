@@ -105,14 +105,37 @@ func (l *Locator) Query(ip string) (*Location, error) {
 	atomic.AddInt64(&l.stats.TotalQueries, 1)
 
 	// 先查询缓存
-	if l.cache != nil {
-		if loc, found := l.cache.Get(ip); found {
-			atomic.AddInt64(&l.stats.SuccessQueries, 1) // 缓存命中也算成功查询
-			atomic.AddInt64(&l.stats.TotalDuration, int64(time.Since(startTime)))
-			return loc, nil
-		}
+	if loc := l.queryCacheIfEnabled(ip, startTime); loc != nil {
+		return loc, nil
 	}
 
+	// 并行查询数据源
+	qqwryLoc, geoliteLoc, qqwryErr, geoliteErr := l.queryProviders(ip)
+
+	// 处理查询结果
+	result, err := l.processQueryResults(ip, qqwryLoc, geoliteLoc, qqwryErr, geoliteErr)
+
+	// 更新统计
+	l.updateQueryStats(startTime)
+	return result, err
+}
+
+// queryCacheIfEnabled 查询缓存（如果启用）
+func (l *Locator) queryCacheIfEnabled(ip string, startTime time.Time) *Location {
+	if l.cache == nil {
+		return nil
+	}
+
+	if loc, found := l.cache.Get(ip); found {
+		atomic.AddInt64(&l.stats.SuccessQueries, 1)
+		atomic.AddInt64(&l.stats.TotalDuration, int64(time.Since(startTime)))
+		return loc
+	}
+	return nil
+}
+
+// queryProviders 并行查询所有数据源
+func (l *Locator) queryProviders(ip string) (*Location, *Location, error, error) {
 	// 获取provider引用（使用短暂的读锁）
 	l.mu.RLock()
 	qqwryProvider := l.qqwryProvider
@@ -147,11 +170,6 @@ func (l *Locator) Query(ip string) (*Location, error) {
 		}()
 	}
 
-	// 如果没有可用的提供者
-	if queryCount == 0 {
-		return nil, ErrNoProvider
-	}
-
 	// 收集查询结果
 	var qqwryLoc, geoliteLoc *Location
 	var qqwryErr, geoliteErr error
@@ -159,56 +177,85 @@ func (l *Locator) Query(ip string) (*Location, error) {
 	for i := 0; i < queryCount; i++ {
 		res := <-results
 		if res.source == "qqwry" {
-			qqwryLoc = res.location
-			qqwryErr = res.err
+			qqwryLoc, qqwryErr = res.location, res.err
 		} else {
-			geoliteLoc = res.location
-			geoliteErr = res.err
+			geoliteLoc, geoliteErr = res.location, res.err
 		}
 	}
 
+	return qqwryLoc, geoliteLoc, qqwryErr, geoliteErr
+}
+
+// processQueryResults 处理查询结果并返回最终位置
+func (l *Locator) processQueryResults(ip string, qqwryLoc, geoliteLoc *Location, qqwryErr, geoliteErr error) (*Location, error) {
 	// 如果两者都失败，返回错误
-	if (qqwryLoc == nil || qqwryLoc.IsEmpty()) && (geoliteLoc == nil || geoliteLoc.IsEmpty()) {
-		atomic.AddInt64(&l.stats.FailedQueries, 1)
-		atomic.AddInt64(&l.stats.TotalDuration, int64(time.Since(startTime)))
-		if qqwryErr != nil {
-			return nil, qqwryErr
-		}
-		if geoliteErr != nil {
-			return nil, geoliteErr
-		}
-		return nil, ErrNoData
+	if l.isBothEmpty(qqwryLoc, geoliteLoc) {
+		return l.handleQueryFailure(qqwryErr, geoliteErr)
 	}
 
 	// 只有一个数据源有结果
-	if qqwryLoc == nil || qqwryLoc.IsEmpty() {
-		atomic.AddInt64(&l.stats.GeoLiteHits, 1)
-		atomic.AddInt64(&l.stats.SuccessQueries, 1)
-		atomic.AddInt64(&l.stats.TotalDuration, int64(time.Since(startTime)))
-		if l.cache != nil {
-			l.cache.Put(ip, geoliteLoc)
-		}
-		return geoliteLoc, nil
-	}
-	if geoliteLoc == nil || geoliteLoc.IsEmpty() {
-		atomic.AddInt64(&l.stats.QQwryHits, 1)
-		atomic.AddInt64(&l.stats.SuccessQueries, 1)
-		atomic.AddInt64(&l.stats.TotalDuration, int64(time.Since(startTime)))
-		if l.cache != nil {
-			l.cache.Put(ip, qqwryLoc)
-		}
-		return qqwryLoc, nil
+	if singleResult := l.handleSingleSource(ip, qqwryLoc, geoliteLoc); singleResult != nil {
+		return singleResult, nil
 	}
 
 	// 两者都有结果，智能合并
+	return l.handleMergedResult(ip, qqwryLoc, geoliteLoc), nil
+}
+
+// isBothEmpty 检查两个位置是否都为空
+func (l *Locator) isBothEmpty(qqwryLoc, geoliteLoc *Location) bool {
+	return (qqwryLoc == nil || qqwryLoc.IsEmpty()) && (geoliteLoc == nil || geoliteLoc.IsEmpty())
+}
+
+// handleQueryFailure 处理查询失败的情况
+func (l *Locator) handleQueryFailure(qqwryErr, geoliteErr error) (*Location, error) {
+	atomic.AddInt64(&l.stats.FailedQueries, 1)
+	if qqwryErr != nil {
+		return nil, qqwryErr
+	}
+	if geoliteErr != nil {
+		return nil, geoliteErr
+	}
+	return nil, ErrNoData
+}
+
+// handleSingleSource 处理只有单个数据源有结果的情况
+func (l *Locator) handleSingleSource(ip string, qqwryLoc, geoliteLoc *Location) *Location {
+	if qqwryLoc == nil || qqwryLoc.IsEmpty() {
+		atomic.AddInt64(&l.stats.GeoLiteHits, 1)
+		atomic.AddInt64(&l.stats.SuccessQueries, 1)
+		if l.cache != nil {
+			l.cache.Put(ip, geoliteLoc)
+		}
+		return geoliteLoc
+	}
+
+	if geoliteLoc == nil || geoliteLoc.IsEmpty() {
+		atomic.AddInt64(&l.stats.QQwryHits, 1)
+		atomic.AddInt64(&l.stats.SuccessQueries, 1)
+		if l.cache != nil {
+			l.cache.Put(ip, qqwryLoc)
+		}
+		return qqwryLoc
+	}
+
+	return nil
+}
+
+// handleMergedResult 处理合并结果
+func (l *Locator) handleMergedResult(ip string, qqwryLoc, geoliteLoc *Location) *Location {
 	atomic.AddInt64(&l.stats.CombinedHits, 1)
 	atomic.AddInt64(&l.stats.SuccessQueries, 1)
 	merged := l.mergeLocations(qqwryLoc, geoliteLoc)
 	if l.cache != nil && merged != nil {
 		l.cache.Put(ip, merged)
 	}
+	return merged
+}
+
+// updateQueryStats 更新查询统计信息
+func (l *Locator) updateQueryStats(startTime time.Time) {
 	atomic.AddInt64(&l.stats.TotalDuration, int64(time.Since(startTime)))
-	return merged, nil
 }
 
 // mergeLocations 智能合并两个位置信息
@@ -217,11 +264,30 @@ func (l *Locator) Query(ip string) (*Location, error) {
 // 2. 以分数高的为基础，用另一个补充缺失字段
 // 3. 保留各自独有的信息（如ISP、经纬度）
 func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
-	// 计算详细程度分数
+	// 打印合并调试信息
+	l.logMergeDebugInfo(qqwry, geolite)
+
+	// 选择主次数据源
+	primary, secondary, _, secondarySource := l.selectPrimarySources(qqwry, geolite)
+
+	// 创建基础合并结果
+	merged := l.createBaseMergedLocation(primary)
+
+	// 补充缺失字段
+	l.fillMissingFields(merged, secondary, secondarySource)
+
+	// 合并特殊字段（ISP、经纬度、时区）
+	l.mergeSpecialFields(merged, qqwry, geolite)
+
+	l.debugLog("\n")
+	return merged
+}
+
+// logMergeDebugInfo 打印合并调试信息
+func (l *Locator) logMergeDebugInfo(qqwry, geolite *Location) {
 	qqwryScore := qqwry.GetDetailScore()
 	geoliteScore := geolite.GetDetailScore()
 
-	// 调试输出：打印数据来源
 	l.debugLog("\n=== 数据合并调试 ===\n")
 	l.debugLog("QQwry  评分: %d | Country:%s | Province:%s | City:%s | District:%s | ISP:%s\n",
 		qqwryScore, qqwry.Country, qqwry.Province, qqwry.City, qqwry.District, qqwry.ISP)
@@ -229,27 +295,33 @@ func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
 		geoliteScore, geolite.Country, geolite.Province, geolite.City, geolite.District,
 		geolite.Latitude, geolite.Longitude, geolite.TimeZone)
 	l.debugLog("==================\n\n")
+}
 
-	// 选择分数高的作为基础数据源
+// selectPrimarySources 选择主次数据源
+func (l *Locator) selectPrimarySources(qqwry, geolite *Location) (*Location, *Location, string, string) {
+	qqwryScore := qqwry.GetDetailScore()
+	geoliteScore := geolite.GetDetailScore()
+
 	var primary, secondary *Location
 	var primarySource, secondarySource string
+
 	if qqwryScore >= geoliteScore {
-		primary = qqwry
-		secondary = geolite
-		primarySource = "qqwry"
-		secondarySource = "geolite"
+		primary, secondary = qqwry, geolite
+		primarySource, secondarySource = "qqwry", "geolite"
 	} else {
-		primary = geolite
-		secondary = qqwry
-		primarySource = "geolite"
-		secondarySource = "qqwry"
+		primary, secondary = geolite, qqwry
+		primarySource, secondarySource = "geolite", "qqwry"
 	}
 
 	l.debugLog("选择 %s 作为主数据源（分数: %d vs %d）\n", primarySource,
 		primary.GetDetailScore(), secondary.GetDetailScore())
 
-	// 以主数据源为基础创建合并结果
-	merged := &Location{
+	return primary, secondary, primarySource, secondarySource
+}
+
+// createBaseMergedLocation 创建基础合并结果
+func (l *Locator) createBaseMergedLocation(primary *Location) *Location {
+	return &Location{
 		IP:       primary.IP,
 		Country:  primary.Country,
 		Province: primary.Province,
@@ -257,8 +329,10 @@ func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
 		District: primary.District,
 		Source:   "combined",
 	}
+}
 
-	// 用次要数据源补充缺失的地理信息字段
+// fillMissingFields 用次要数据源补充缺失的地理信息字段
+func (l *Locator) fillMissingFields(merged, secondary *Location, secondarySource string) {
 	if merged.Country == "" && secondary.Country != "" {
 		l.debugLog("  → Country 补充自 %s: %s\n", secondarySource, secondary.Country)
 		merged.Country = secondary.Country
@@ -275,8 +349,22 @@ func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
 		l.debugLog("  → District 补充自 %s: %s\n", secondarySource, secondary.District)
 		merged.District = secondary.District
 	}
+}
 
+// mergeSpecialFields 合并特殊字段（ISP、经纬度、时区）
+func (l *Locator) mergeSpecialFields(merged, qqwry, geolite *Location) {
 	// ISP信息：优先使用qqwry（只有qqwry有ISP信息）
+	l.mergeISP(merged, qqwry, geolite)
+
+	// 经纬度：优先使用geolite（只有geolite有这些信息）
+	l.mergeCoordinates(merged, qqwry, geolite)
+
+	// 时区：优先使用geolite
+	l.mergeTimeZone(merged, qqwry, geolite)
+}
+
+// mergeISP 合并ISP信息
+func (l *Locator) mergeISP(merged, qqwry, geolite *Location) {
 	if qqwry.ISP != "" {
 		l.debugLog("  → ISP 来自 qqwry: %s\n", qqwry.ISP)
 		merged.ISP = qqwry.ISP
@@ -284,8 +372,10 @@ func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
 		l.debugLog("  → ISP 来自 geolite: %s\n", geolite.ISP)
 		merged.ISP = geolite.ISP
 	}
+}
 
-	// 经纬度和时区：优先使用geolite（只有geolite有这些信息）
+// mergeCoordinates 合并经纬度信息
+func (l *Locator) mergeCoordinates(merged, qqwry, geolite *Location) {
 	if geolite.Latitude != 0 || geolite.Longitude != 0 {
 		l.debugLog("  → 经纬度 来自 geolite: (%.4f, %.4f)\n", geolite.Latitude, geolite.Longitude)
 		merged.Latitude = geolite.Latitude
@@ -294,7 +384,10 @@ func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
 		merged.Latitude = qqwry.Latitude
 		merged.Longitude = qqwry.Longitude
 	}
+}
 
+// mergeTimeZone 合并时区信息
+func (l *Locator) mergeTimeZone(merged, qqwry, geolite *Location) {
 	if geolite.TimeZone != "" {
 		l.debugLog("  → 时区 来自 geolite: %s\n", geolite.TimeZone)
 		merged.TimeZone = geolite.TimeZone
@@ -302,9 +395,6 @@ func (l *Locator) mergeLocations(qqwry, geolite *Location) *Location {
 		l.debugLog("  → 时区 来自 qqwry: %s\n", qqwry.TimeZone)
 		merged.TimeZone = qqwry.TimeZone
 	}
-
-	l.debugLog("\n")
-	return merged
 }
 
 // debugLog 调试日志输出（仅在Debug模式下）
