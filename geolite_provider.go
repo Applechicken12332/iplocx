@@ -1,9 +1,9 @@
 package iplocx
 
 import (
-	"net/netip"
+	"net"
 
-	"github.com/oschwald/geoip2-golang/v2"
+	"github.com/oschwald/geoip2-golang"
 )
 
 // GeoLiteProvider GeoLite2数据库查询提供者
@@ -26,62 +26,53 @@ func (p *GeoLiteProvider) Query(ip string) (*Location, error) {
 		return nil, ErrDatabaseNotFound
 	}
 
-	// 解析IP地址
-	addr, err := netip.ParseAddr(ip)
-	if err != nil {
+	// 解析IP地址（v1 使用 net.IP）
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
 		return nil, ErrInvalidIP
 	}
 
 	// 查询城市信息
-	record, err := p.db.City(addr)
+	record, err := p.db.City(parsedIP)
 	if err != nil {
 		return nil, err
-	}
-
-	// 检查是否有数据
-	if !record.HasData() {
-		return nil, ErrNoData
 	}
 
 	// 构建位置信息
 	location := &Location{
 		IP:      ip,
-		Country: record.Country.Names.SimplifiedChinese,
-		City:    record.City.Names.SimplifiedChinese,
+		Country: record.Country.Names["zh-CN"],
+		City:    record.City.Names["zh-CN"],
 		Source:  "geolite2",
 	}
 
 	// 国家名称备选方案：Country中文 -> RegisteredCountry中文 -> Country英文 -> RegisteredCountry英文
 	if location.Country == "" {
-		location.Country = record.RegisteredCountry.Names.SimplifiedChinese
+		location.Country = record.RegisteredCountry.Names["zh-CN"]
 	}
 	if location.Country == "" {
-		location.Country = record.Country.Names.English
+		location.Country = record.Country.Names["en"]
 	}
 	if location.Country == "" {
-		location.Country = record.RegisteredCountry.Names.English
+		location.Country = record.RegisteredCountry.Names["en"]
 	}
 
 	// 英文城市名作为备选
 	if location.City == "" {
-		location.City = record.City.Names.English
+		location.City = record.City.Names["en"]
 	}
 
 	// 省/州信息
 	if len(record.Subdivisions) > 0 {
-		location.Province = record.Subdivisions[0].Names.SimplifiedChinese
+		location.Province = record.Subdivisions[0].Names["zh-CN"]
 		if location.Province == "" {
-			location.Province = record.Subdivisions[0].Names.English
+			location.Province = record.Subdivisions[0].Names["en"]
 		}
 	}
 
 	// 经纬度信息
-	if record.Location.Latitude != nil {
-		location.Latitude = *record.Location.Latitude
-	}
-	if record.Location.Longitude != nil {
-		location.Longitude = *record.Location.Longitude
-	}
+	location.Latitude = record.Location.Latitude
+	location.Longitude = record.Location.Longitude
 
 	// 时区信息
 	location.TimeZone = record.Location.TimeZone
